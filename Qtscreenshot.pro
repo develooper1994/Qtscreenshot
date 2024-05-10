@@ -9,13 +9,19 @@ CONFIG += c++17
 #DEFINES += QT_DISABLE_DEPRECATED_BEFORE=0x060000    # disables all the APIs deprecated before Qt 6.0.0
 
 SOURCES += \
-    commanlineoption.cpp \
+    cmd.cpp \
     main.cpp \
-    dialog.cpp
+    dialog.cpp \
+    tcpclient.cpp \
+    tcpserver.cpp
 
 HEADERS += \
-    commanlineoption.h \
-    dialog.h
+    cmd.h \
+    defines.h \
+    dialog.h \
+    help.h \
+    tcpclient.h \
+    tcpserver.h
 
 FORMS += \
     dialog.ui

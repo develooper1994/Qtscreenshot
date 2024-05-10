@@ -1,5 +1,5 @@
-#ifndef COMMANLINEOPTION_H
-#define COMMANLINEOPTION_H
+#ifndef CMD_H
+#define CMD_H
 
 #include "defines.h"
 #include <QApplication>
@@ -7,38 +7,65 @@
 #include <QCommandLineParser>
 #include <QObject>
 
+void setApplicationSettings();
+
 typedef struct TagBindInfo {
-  QString IpStr = defaultIp;
-  uint16_t Port = defaultPort;
+  /*
+enum class BindInfoStatus : uint64_t {
+  Ok = 0,
+  Error = 1 << 0,
+  BindError = 1 << 1,
+  IpError = 1 << 2,
+  IncomePortError = 1 << 3,
+  OutcomePortError = 1 << 4,
+  PortError = 1 << 5
+};
+*/
+  QString IpStr = defaultIp, ConnectionType = defaultConnectionType;
+  uint16_t IncomePort = defaultIncomePort;
+  uint16_t OutcomePort = defaultOutcomePort;
 } BindInfo;
 
 typedef struct TagCmdOptions {
-  bool gui = false;
+  bool help, gui, verbose, client, server;
   int number = 1;
-  QString filename = QString(defaultFilename), usage = QString(defaultUsage);
+  QString filename = defaultFilename, usage = defaultUsage;
   BindInfo bindInfo;
   // IsSet;
-  bool numberIsSet, filenameIsSet, usageIsSet, bindInfoIsSet;
+  bool numberIsSet, filenameIsSet, usageIsSet, bindInfoIsSet,
+      connectiontypeIsSet;
 } CmdOptions;
 
 typedef struct TagCmdParseResult {
+  // Max states : 64 - 1(MaxValue) = 63
   enum class Status : std::uint64_t {
     // 0b0000000000000010 // third way
-    Ok = 0,                     // 0000 0000 0000 0000 // MinValue
-    Error = 1 << 0,             // 0000 0000 0000 0001
-    VersionRequested = 1 << 1,  // 0000 0000 0000 0010
-    HelpRequested = 1 << 2,     // 0000 0000 0000 0100
-    UsageError = 1 << 3,        // 0000 0000 0000 1000
-    UsageClient = 1 << 4,       // 0000 0000 0001 0000
-    UsageServer = 1 << 5,       // 0000 0000 0010 0000
-    FileNameError = 1 << 6,     // 0000 0000 0100 0000
-    OnlyIpRequested = 1 << 7,   // 0000 0000 1000 0000
-    OnlyPortRequested = 1 << 8, // 0000 0001 0000 0000
-    BindError = 1 << 9,         // 0000 0010 0000 0000
-    IpError = 1 << 10,          // 0000 0100 0000 0000
-    GuiRequired = 1 << 11,      // 0000 1000 0000 0000
-    NumberError = 1 << 12,      // 0001 0000 0000 0000
-    MaxValue                    // 0001 0000 0000 0001
+    Ok = 0,                    // 0000 0000 0000 0000 // MinValue
+    Error = 1 << 0,            // 0000 0000 0000 0001
+    VersionRequested = 1 << 1, // 0000 0000 0000 0010
+    HelpRequested = 1 << 2,    // ...
+    ServerHelpRequested = 1 << 3,
+    ClientHelpRequested = 1 << 4,
+    UsageError = 1 << 5,
+    UsageClient = 1 << 6,
+    UsageServer = 1 << 7,
+    FileNameError = 1 << 8,
+    FileNameRequired = 1 << 9,
+    OnlyIpRequested = 1 << 10,
+    OnlyPortRequested = 1 << 11,
+    BindRequired = 1 << 12,
+    BindError = 1 << 13,
+    IpError = 1 << 14,
+    IncomePortError = 1 << 15,
+    OutcomePortError = 1 << 16,
+    ConnectionTypeRequired = 1 << 17,
+    ConnectionTypeError = 1 << 18,
+    ConnectionTypeTCP = 1 << 19,
+    ConnectionTypeUDP = 1 << 20,
+    GuiRequired = 1 << 21,
+    VerboseRequired = 1 << 22,
+    NumberError = 1 << 23,
+    MaxValue
   };
 
   // Status statusCode = Status::Ok;
@@ -80,8 +107,6 @@ inline CmdParseResult::Status operator^(CmdParseResult::Status &lhs,
       std::underlying_type_t<CmdParseResult::Status>(rhs));
 }
 
-void setApplicationSettings();
-
 class Cmd {
 public:
   // constructors
@@ -93,49 +118,56 @@ public:
 
 private:
   CmdParseResult::Status status = CmdParseResult::Status::Ok;
-  QMap<CmdParseResult::Status, QString> errorMessages;
-  CmdOptions cmdOptions;
+  // QMap<CmdParseResult::Status, QString> messages;
+  // CmdOptions cmdOptions;
   CmdParseResult cmdParseResult;
   QCommandLineParser parser;
   // Help, Version and other options
   const QCommandLineOption helpOption = parser.addHelpOption();
   const QCommandLineOption versionOption = parser.addVersionOption();
   const QList<QCommandLineOption> optionList = {
-      {{"g", "gui"}, QApplication::translate("main", "Gui mode.")},
+      {{"V", "verbose"}, QApplication::translate("main", __SECTION_Verbose)},
+      {{"g", "gui"}, QApplication::translate("main", __SECTION_Gui)},
       {{"f", "filename"},
-       QApplication::translate("main",
-                               "Specify the filename for the screenshot."),
+       QApplication::translate("main", __SECTION_Filename),
        QApplication::translate("main", "filename"),
        defaultFilename},
       {{"n", "number"},
-       QApplication::translate("main", "Specify the number of shots."),
+       QApplication::translate("main", __SECTION_Number),
        QApplication::translate("main", "number"),
        defaultNumber},
       {{"u", "usage"},
-       QApplication::translate("main",
-                               "Specify the type of usage Client/Server."),
+       QApplication::translate("main", __SECTION_Usage),
        QApplication::translate("main", "usage(client/server)"),
        defaultUsage},
+      {{"c", "ct", "connection-type"},
+       QApplication::translate("main", __SECTION_ConnectionType),
+       QApplication::translate("main", "usage(TCP/UDP)"),
+       defaultConnectionType},
       {{"b", "bind"},
        QApplication::translate("main",
                                "Specify the IP:Port address to send to."),
        QApplication::translate("main", "bind"),
        defaultBind}};
-  const QStringList usageTypes{"client", "server"};
+  const QStringList usageTypes{"c", "client", "s", "server"};
+  const QStringList connectionTypes{"t", "tcp", "u", "udp"};
 
   // private methods
   CmdParseResult parseCommandLine(QCommandLineParser &parser);
   bool ipValidate(const QString &ipStr) const;
 
   // Option Checks
+  void verboseOptionCheck();
   void guiOptionCheck();
+  void filenameOptionCheck();
   void numberOptionCheck();
   void bindOptionCheck();
   void usageOptionCheck();
+  void connectiontypeOptionCheck();
 
   // Eval Client/Server
-  void evalCmdClient();
-  void evalCmdServer();
+  void MainClient();
+  void MainServer();
 };
 
-#endif // COMMANLINEOPTION_H
+#endif // CMD_H
