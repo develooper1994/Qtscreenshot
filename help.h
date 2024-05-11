@@ -29,9 +29,9 @@
 #define __SECTION_Help                                                         \
   "* -h, --help(bool) : Help \n"                                               \
   "\tDefault : " defaultHelp "\n"                                              \
-  "* -h -u client || -u client -h : Client Help \n"                            \
+  "* -h client || client -h : Client Help \n"                                  \
   "\tDefault : " defaultClientHelp "\n"                                        \
-  "* -h -u server || -u server -h : Server Help \n"                            \
+  "* -h server || server -h : Server Help \n"                                  \
   "\tDefault : " defaultServerHelp "\n"
 
 #define __SECTION_Version                                                      \
@@ -41,6 +41,10 @@
 #define __SECTION_Verbose                                                      \
   "* -V, --verbose(bool) : Verbose \n"                                         \
   "\tDefault : " defaultVerbose "\n"
+
+#define __SECTION_Debug                                                        \
+  "* -d, --debug(bool) : Debug \n"                                             \
+  "\tDefault : " defaultDebug "\n"
 
 #define __SECTION_Usage                                                           \
   "* (!!!not implemented!!!) -u, --usage(string) : kullanım "                    \
@@ -79,10 +83,12 @@
   "\tDefault :  " defaultConnectionType "\n"
 
 #define __SECTION_Main                                                         \
-  __SECTION_Help __SECTION_Version __SECTION_Verbose __SECTION_Usage           \
-      __SECTION_Gui __SECTION_Filename __SECTION_Number __SECTION_Bind
+  __SECTION_Help __SECTION_Version __SECTION_Verbose __SECTION_Verbose         \
+      __SECTION_Usage __SECTION_Gui __SECTION_Filename __SECTION_Number        \
+          __SECTION_Bind
 
-#define HelpMain HelpHeader __SECTION_Help __SECTION_Version HelpFooter
+#define HelpMain                                                               \
+  HelpHeader __SECTION_Help __SECTION_Version __SECTION_Verbose HelpFooter
 
 // HelpHeader HelpGeneral HelpFooter
 

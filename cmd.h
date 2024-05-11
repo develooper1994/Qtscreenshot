@@ -27,7 +27,7 @@ enum class BindInfoStatus : uint64_t {
 } BindInfo;
 
 typedef struct TagCmdOptions {
-  bool help, gui, verbose, client, server;
+  bool help, gui, verbose, debug, client, server;
   int number = 1;
   QString filename = defaultFilename, usage = defaultUsage;
   BindInfo bindInfo;
@@ -64,17 +64,20 @@ typedef struct TagCmdParseResult {
     ConnectionTypeUDP = 1 << 20,
     GuiRequired = 1 << 21,
     VerboseRequired = 1 << 22,
-    NumberError = 1 << 23,
+    DebugRequired = 1 << 23,
+    NumberError = 1 << 24,
     MaxValue
   };
 
   // Status statusCode = Status::Ok;
   // my compiler is not that advanced
   // std::optional<QString> status = std::nullopt;
-  QMap<Status, QString> status = QMap<Status, QString>();
+  typedef QMap<Status, QString> StatusType;
+  StatusType status = StatusType();
   CmdOptions options = CmdOptions();
 
 public:
+  void insertWithUniqueValue(const Status &key, const QString &value);
   bool isSet(Status stat = Status::Ok,
              const Status &statToCheck = Status::Ok) const;
   Status getMaximumStatus();
@@ -125,8 +128,10 @@ private:
   // Help, Version and other options
   const QCommandLineOption helpOption = parser.addHelpOption();
   const QCommandLineOption versionOption = parser.addVersionOption();
+  QString usageSubcommand, connectiontypeSubcommand;
   const QList<QCommandLineOption> optionList = {
       {{"V", "verbose"}, QApplication::translate("main", __SECTION_Verbose)},
+      {{"d", "debug"}, QApplication::translate("main", __SECTION_Debug)},
       {{"g", "gui"}, QApplication::translate("main", __SECTION_Gui)},
       {{"f", "filename"},
        QApplication::translate("main", __SECTION_Filename),
@@ -136,17 +141,18 @@ private:
        QApplication::translate("main", __SECTION_Number),
        QApplication::translate("main", "number"),
        defaultNumber},
+      /*
       {{"u", "usage"},
        QApplication::translate("main", __SECTION_Usage),
        QApplication::translate("main", "usage(client/server)"),
        defaultUsage},
+      */
       {{"c", "ct", "connection-type"},
        QApplication::translate("main", __SECTION_ConnectionType),
        QApplication::translate("main", "usage(TCP/UDP)"),
        defaultConnectionType},
       {{"b", "bind"},
-       QApplication::translate("main",
-                               "Specify the IP:Port address to send to."),
+       QApplication::translate("main", __SECTION_Bind),
        QApplication::translate("main", "bind"),
        defaultBind}};
   const QStringList usageTypes{"c", "client", "s", "server"};
@@ -156,14 +162,16 @@ private:
   CmdParseResult parseCommandLine(QCommandLineParser &parser);
   bool ipValidate(const QString &ipStr) const;
 
-  // Option Checks
   void verboseOptionCheck();
+  void debugOptionCheck();
   void guiOptionCheck();
   void filenameOptionCheck();
   void numberOptionCheck();
   void bindOptionCheck();
   void usageOptionCheck();
   void connectiontypeOptionCheck();
+  void optionChecks();
+  void subcommandCheck();
 
   // Eval Client/Server
   void MainClient();

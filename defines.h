@@ -125,6 +125,7 @@ consteval decltype(auto) static_concat() noexcept {
 #define defaultServerHelp "False"
 #define defaultVersion "True"
 #define defaultVerbose "False"
+#define defaultDebug "False"
 #define defaultGui "False"
 #define defaultFilename "untitled.jpg"
 #define defaultNumber "1"
