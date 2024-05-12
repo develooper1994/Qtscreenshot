@@ -26,12 +26,23 @@
 
 #define HelpFooter FuturePlan "\n" Author
 
+#define __SECTION_SubCommand                                                       \
+  "* (NI) (positional) : kullanım türü(client/server).\n"                       \
+  "\tDefault : " defaultUsage "\n"                                                 \
+  "\tBelirtilmezse client kabul edilir. Eğer client modunda server gibi, \n"      \
+  "\tserver modunda client gibi kullanılırsa hata verir. Client ve Server \n"    \
+  "\tmodundaki seçenekler birbirlerinden farklıdır. Eğer client hakkında \n"  \
+  "\tyardım almak istiyorsanız <programadı> client --help || client -h || "     \
+  "--help client || -h client , Eğer server \n"                                   \
+  "\thakkında yardım almak istiyorsanız <programadı> server --help || server " \
+  "-h || --help server || -h server \n"
+
 #define __SECTION_Help                                                         \
   "* -h, --help(bool) : Help \n"                                               \
   "\tDefault : " defaultHelp "\n"                                              \
-  "* -h client || client -h : Client Help \n"                                  \
+  "* client -h || -h client : Client Help \n"                                  \
   "\tDefault : " defaultClientHelp "\n"                                        \
-  "* -h server || server -h : Server Help \n"                                  \
+  "* server -h || -h server : Server Help \n"                                  \
   "\tDefault : " defaultServerHelp "\n"
 
 #define __SECTION_Version                                                      \
@@ -47,7 +58,7 @@
   "\tDefault : " defaultDebug "\n"
 
 #define __SECTION_Usage                                                           \
-  "* (!!!not implemented!!!) -u, --usage(string) : kullanım "                    \
+  "* (NI) -u, --usage(string) : kullanım "                                       \
   "türü(client/server).\n"                                                      \
   "\tDefault : " defaultUsage "\n"                                                \
   "\tBelirtilmezse client kabul edilir. Eğer client modunda server gibi, \n"     \
@@ -57,7 +68,7 @@
   "\thakkında yardım almak istiyorsanız <programadı> server --help \n"
 
 #define __SECTION_Gui                                                          \
-  "* (!!!not implemented!!!)  -g, --gui(bool) : Gui istiyor musun? \n"         \
+  "* (NI)  -g, --gui(bool) : Gui istiyor musun? \n"                            \
   "\tResim ekranda gösterilsin mi? \n"                                        \
   "\tDefault : " defaultGui "\n"
 
@@ -84,8 +95,8 @@
 
 #define __SECTION_Main                                                         \
   __SECTION_Help __SECTION_Version __SECTION_Verbose __SECTION_Verbose         \
-      __SECTION_Usage __SECTION_Gui __SECTION_Filename __SECTION_Number        \
-          __SECTION_Bind
+      __SECTION_Gui __SECTION_Filename __SECTION_Number __SECTION_Bind         \
+          __SECTION_Subcommand
 
 #define HelpMain                                                               \
   HelpHeader __SECTION_Help __SECTION_Version __SECTION_Verbose HelpFooter

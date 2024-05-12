@@ -2,6 +2,7 @@
 #define CMD_H
 
 #include "defines.h"
+#include "dialog.h"
 #include <QApplication>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
@@ -9,6 +10,7 @@
 
 void setApplicationSettings();
 
+// -*-*-*-*-* BindInfo *-*-*-*-*-
 typedef struct TagBindInfo {
   /*
 enum class BindInfoStatus : uint64_t {
@@ -26,6 +28,7 @@ enum class BindInfoStatus : uint64_t {
   uint16_t OutcomePort = defaultOutcomePort;
 } BindInfo;
 
+// -*-*-*-*-* CmdOptions *-*-*-*-*-
 typedef struct TagCmdOptions {
   bool help, gui, verbose, debug, client, server;
   int number = 1;
@@ -36,51 +39,59 @@ typedef struct TagCmdOptions {
       connectiontypeIsSet;
 } CmdOptions;
 
+// -*-*-*-*-* CmdParseResult *-*-*-*-*-
+
 typedef struct TagCmdParseResult {
-  // Max states : 64 - 1(MaxValue) = 63
+  // Max not combined states : 64 - 1(MaxValue) = 63
   enum class Status : std::uint64_t {
     // 0b0000000000000010 // third way
     Ok = 0,                    // 0000 0000 0000 0000 // MinValue
-    Error = 1 << 0,            // 0000 0000 0000 0001
-    VersionRequested = 1 << 1, // 0000 0000 0000 0010
-    HelpRequested = 1 << 2,    // ...
-    ServerHelpRequested = 1 << 3,
-    ClientHelpRequested = 1 << 4,
-    UsageError = 1 << 5,
-    UsageClient = 1 << 6,
-    UsageServer = 1 << 7,
-    FileNameError = 1 << 8,
-    FileNameRequired = 1 << 9,
-    OnlyIpRequested = 1 << 10,
-    OnlyPortRequested = 1 << 11,
-    BindRequired = 1 << 12,
-    BindError = 1 << 13,
-    IpError = 1 << 14,
-    IncomePortError = 1 << 15,
-    OutcomePortError = 1 << 16,
-    ConnectionTypeRequired = 1 << 17,
-    ConnectionTypeError = 1 << 18,
-    ConnectionTypeTCP = 1 << 19,
-    ConnectionTypeUDP = 1 << 20,
-    GuiRequired = 1 << 21,
-    VerboseRequired = 1 << 22,
-    DebugRequired = 1 << 23,
-    NumberError = 1 << 24,
-    MaxValue
+    VersionRequested = 1 << 0, // 0000 0000 0000 0010
+    HelpRequested = 1 << 1,    // 0000 0000 0000 0001
+    Error = 1 << 2,            // ...
+    SubcommandError = 1 << 3,
+    PositionalArgumentsError = 1 << 4,
+    ParseError = 1 << 5,
+    ServerHelpRequested = 1 << 6,
+    ClientHelpRequested = 1 << 7,
+    UsageError = 1 << 8,
+    UsageClient = 1 << 9,
+    UsageServer = 1 << 10,
+    FileNameError = 1 << 11,
+    FileNameRequired = 1 << 12,
+    OnlyIpRequested = 1 << 13,
+    OnlyPortRequested = 1 << 14,
+    BindRequired = 1 << 15,
+    BindError = 1 << 16,
+    IpError = 1 << 17,
+    IncomePortError = 1 << 18,
+    OutcomePortError = 1 << 19,
+    ConnectionTypeRequired = 1 << 20,
+    ConnectionTypeError = 1 << 21,
+    ConnectionTypeTCP = 1 << 22,
+    ConnectionTypeUDP = 1 << 23,
+    GuiRequired = 1 << 24,
+    VerboseRequired = 1 << 25,
+    DebugRequired = 1 << 26,
+    NumberError = 1 << 27,
+    MaxValue = UINT64_MAX
   };
+  typedef QMap<Status, QString> StatMsgType;
 
   // Status statusCode = Status::Ok;
   // my compiler is not that advanced
   // std::optional<QString> status = std::nullopt;
-  typedef QMap<Status, QString> StatusType;
-  StatusType status = StatusType();
+  StatMsgType statusMessage = StatMsgType();
   CmdOptions options = CmdOptions();
+  Status status = Status::Ok;
 
 public:
-  void insertWithUniqueValue(const Status &key, const QString &value);
-  bool isSet(Status stat = Status::Ok,
-             const Status &statToCheck = Status::Ok) const;
-  Status getMaximumStatus();
+  void insertUniqueValue(const Status statToSet = Status::Ok);
+  void insertUniqueValue(Status &key);
+  void insertUniqueValue(Status &key, const Status statToSet = Status::Ok);
+  void insertUniqueValue(const Status &key, const QString &value);
+  void insertUniqueValue(Status &key, const QString &value,
+                             const Status statToSet = Status::Ok);
 } CmdParseResult;
 
 // use "static_cast" if compiler doesn't support "underlying_type_t"
@@ -109,7 +120,17 @@ inline CmdParseResult::Status operator^(CmdParseResult::Status &lhs,
       std::underlying_type_t<CmdParseResult::Status>(lhs) |
       std::underlying_type_t<CmdParseResult::Status>(rhs));
 }
+void setStatus(
+    CmdParseResult::Status &stat,
+    const CmdParseResult::Status statToSet = CmdParseResult::Status::Ok);
+bool isStatusSet(
+    CmdParseResult::Status stat = CmdParseResult::Status::Ok,
+    const CmdParseResult::Status &statToCheck = CmdParseResult::Status::Ok);
+QString getStatusMessage(
+    const CmdParseResult::Status &statToCheck = CmdParseResult::Status::Ok);
+CmdParseResult::Status getMaximumStatus();
 
+// -*-*-*-*-* Cmd *-*-*-*-*-
 class Cmd {
 public:
   // constructors
@@ -120,15 +141,13 @@ public:
   void evalCmd();
 
 private:
-  CmdParseResult::Status status = CmdParseResult::Status::Ok;
-  // QMap<CmdParseResult::Status, QString> messages;
-  // CmdOptions cmdOptions;
+  // CmdParseResult::Status status = CmdParseResult::Status::Ok;
+  Dialog w;
   CmdParseResult cmdParseResult;
   QCommandLineParser parser;
   // Help, Version and other options
   const QCommandLineOption helpOption = parser.addHelpOption();
   const QCommandLineOption versionOption = parser.addVersionOption();
-  QString usageSubcommand, connectiontypeSubcommand;
   const QList<QCommandLineOption> optionList = {
       {{"V", "verbose"}, QApplication::translate("main", __SECTION_Verbose)},
       {{"d", "debug"}, QApplication::translate("main", __SECTION_Debug)},
@@ -155,11 +174,9 @@ private:
        QApplication::translate("main", __SECTION_Bind),
        QApplication::translate("main", "bind"),
        defaultBind}};
-  const QStringList usageTypes{"c", "client", "s", "server"};
-  const QStringList connectionTypes{"t", "tcp", "u", "udp"};
 
   // private methods
-  CmdParseResult parseCommandLine(QCommandLineParser &parser);
+  void parseCommandLine();
   bool ipValidate(const QString &ipStr) const;
 
   void verboseOptionCheck();

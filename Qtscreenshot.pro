@@ -16,6 +16,7 @@ SOURCES += \
     tcpserver.cpp
 
 HEADERS += \
+    ConstMessages.h \
     cmd.h \
     defines.h \
     dialog.h \

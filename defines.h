@@ -4,6 +4,7 @@
 #include <cstdint>
 
 /*
+// C++ 20 :'(
 #include <format>
 #include <iostream>
 
@@ -142,6 +143,7 @@ consteval decltype(auto) static_concat() noexcept {
 #define MaxPositionalArgs 0
 #define Author "* Author: Mustafa Selçuk Çağlar\n"
 
+#include "ConstMessages.h"
 #include "help.h"
 
 #endif // DEFINES_H
