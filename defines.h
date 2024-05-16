@@ -16,7 +16,7 @@
 #define defaultVerbose "False"
 #define defaultDebug "False"
 #define defaultGui "False"
-#define defaultScreen "0"
+#define defaultScreen ""
 #define defaultFilename "untitled.jpg"
 #define defaultNumber "1"
 #define defaultIp "127.0.0.1"        // ip:port
@@ -29,10 +29,13 @@
   defaultIp defaultBindSeperator defaultIncomePortStr // ip:port
 #define defaultUsage "client"
 #define defaultConnectionType "TCP"
+#define Fbdev "/dev/fb"
+#define defaultFbdev Fbdev defaultScreen
 #define MaxPositionalArgs 0
 #define Author "* Author: Mustafa Selçuk Çağlar\n"
+#define bugTrackerUrl "https://github.com/jwilk/fbcat/issues"
 
-#include "ConstMessages.h"
+#include "constmessages.h"
 #include "help.h"
 
 #endif // DEFINES_H

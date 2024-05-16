@@ -1,8 +1,13 @@
 #include "cmd.h"
 #include "defines.h"
 
+#include <QDir>
+#include <QFile>
 #include <QHostAddress>
 #include <QScreen>
+#include <QSysInfo>
+#include <fstream>
+#include <iostream>
 
 using Status = CmdParseResult::Status;
 
@@ -45,6 +50,87 @@ inline void setApplicationSettings() {
   QApplication::setApplicationName(APPLICATIONNAME);
   QApplication::setApplicationVersion(VERSION);
   QApplication::setApplicationDisplayName(APPLICATIONNAME);
+}
+
+// -*-*-*-*-* ScreenInfo *-*-*-*-*-
+ScreenInfo::TagScreenInfo() : TagScreenInfo(defaultScreen) {}
+
+ScreenInfo::TagScreenInfo(const QString &screen)
+    : TagScreenInfo(screen, ScreenType::ScreenNumber) {}
+
+ScreenInfo::TagScreenInfo(const QString &screen, ScreenType type)
+    : screen(screen), type(type) {
+  /* Demorgan
+   !(P && Q) = (!P) || (!Q)
+   !(!P && !Q) = (P) || (Q)
+  */
+  /*
+   * if os is using framebuffer to display something than assume the screen
+   number as framebuffer number. Ex: /dev/fb + QString::number(screen)
+
+   * /dev/fb0
+   * <argv[0]> -d -V -s 0 -f img.jpg
+  */
+
+  /*
+   Sayıya çevirmeyi dene,
+    - numberOk == true,
+      - numberOfScreen = QGuiApplication::screens().count() olmasıyla
+      - screenNumberAvailable kontrolü yapılır
+        - screenNumberAvailable == true,
+          - screenNumber = screenNumber;
+        - screenNumberAvailable == false,
+          - screenNumber = defaultScreenNumber;
+    - numberOk == false,
+      - numberOfScreen=0 olmasıyla
+        - screenNumberAvailable=false olur
+          - screenNumber == defaultScreenNumber yani sanırım 1. ekran.
+   */
+  bool numberOk;
+  // screen.toStdString().c_str()
+  int screenNumber = screen.trimmed().toInt(&numberOk); // screen == 0
+  // check if numberOk == true otherwise (0 or false)
+  const int numberOfScreen = numberOk ? QGuiApplication::screens().count() : 0;
+  QScreen *pscreen = QGuiApplication::primaryScreen();
+  int defaultScreenNumber = QGuiApplication::screens().indexOf(pscreen);
+  const bool screenNumberAvailable = screenNumber < numberOfScreen;
+  screenNumber = screenNumberAvailable ? screenNumber : defaultScreenNumber;
+  if (!screenNumberAvailable)
+    this->type = ScreenType::ScreenError;
+
+#if defined(Q_OS_LINUX)
+
+  const bool fbExist = QFile::exists(screen);
+  const bool fbUsageCheck = isFramebufferExists(),
+             fbOk = fbUsageCheck && fbExist;
+  if (fbUsageCheck)
+    this->type = ScreenType::Framebuffer;
+
+  if (fbOk) {
+    // input == "/dev/fb0"
+    this->screen = screen;
+  } else if (fbUsageCheck) {
+    // "/dev/fb" + (input == ?)
+    if (numberOk)
+      this->screen = QString(Fbdev) + QString::number(screenNumber);
+    else
+      this->screen = QString(Fbdev);
+  } else if (numberOk) {
+    // no framebuffer
+    this->screen = QString::number(screenNumber);
+    this->type = ScreenType::ScreenNumber;
+  }
+
+#elif defined(Q_OS_WIN) || defined(Q_OS_MACX)
+  this->screen = QString::number(screenNumber);
+  this->type = ScreenType::ScreenNumber;
+#else
+  this->screen = screen;
+  this->type = ScreenType::ScreenError;
+  qDebug() << "Not implemented yet!";
+#endif
+
+  qDebug() << "screen: " << this->screen;
 }
 
 // -*-*-*-*-* Cmd *-*-*-*-*-
@@ -112,17 +198,30 @@ inline void Cmd::numberOptionCheck() {
   }
 }
 inline void Cmd::screenOptionCheck() {
-  bool screenOk;
-  parseResult.options.screen =
-      parser.value("screen").trimmed().toInt(&screenOk);
+  /* Demorgan
+   !(P && Q) = (!P) || (!Q)
+   !(!P && !Q) = (P) || (Q)
+  */
 
-  const QList<QScreen *> screen = QGuiApplication::screens();
-  const int numberOfScreen = screen.count();
+  // if os is using framebuffer to display something than assume the screen
+  // number as framebuffer number. Ex: /dev/fb + QString::number(screen)
+  const QString &screenVal = parser.value("screen"); // .trimmed()
 
-  if (!screenOk || numberOfScreen <= parseResult.options.screen) {
+  /*
+  // /dev/fb0
+  // <argv[0]> -d -V -s 0 -f img.jpg
+  bool numberOk;
+  int screenAsNumber = screenVal.trimmed().toInt(&numberOk);
+  const int numberOfScreen = QGuiApplication::screens().count();
+
+  if (!numberOk || numberOfScreen <= screenAsNumber) {
     // insertUnique(Status::ScreenError);
     setStatus(parseResult.status, Status::ScreenError);
+    return;
   }
+  */
+
+  parseResult.options.screen = ScreenInfo(screenVal);
 }
 
 inline void Cmd::usageOptionCheck() {
@@ -276,14 +375,14 @@ inline void Cmd::subcommandChecks() {
   /*
   // connection-type as subcommand
   if (!connectiontypeSubcommand.compare(connectionTypes.at(1),
-                                        Qt::CaseSensitivity::CaseInsensitive)) {
-    cmdParseResult.options.connectiontypeIsSet = true;
+                                        Qt::CaseSensitivity::CaseInsensitive))
+  { cmdParseResult.options.connectiontypeIsSet = true;
     // insertUniqueValue(cmdParseResult.status, __TcpMessage,
     // Status::ConnectionTypeTCP);
     insertUnique(Status::ConnectionTypeTCP);
   } else if (!connectiontypeSubcommand.compare(
-                 connectionTypes.at(3), Qt::CaseSensitivity::CaseInsensitive)) {
-    cmdParseResult.options.connectiontypeIsSet = true;
+                 connectionTypes.at(3), Qt::CaseSensitivity::CaseInsensitive))
+  { cmdParseResult.options.connectiontypeIsSet = true;
     // insertUniqueValue(cmdParseResult.status, __UdpMessage,
     // Status::ConnectionTypeUDP);
     insertUnique(Status::ConnectionTypeUDP);
@@ -314,8 +413,8 @@ inline void Cmd::parseCommandLine() {
     __statusToMessage.insert(
         Status::ParseError,
         QString("There are unknown options: %2").arg(unknownOptions.join(" ")));
-    // insertUniqueValue(Status::ParseError, QString("There are unknown options:
-    // %2").arg(unknownOptions.join(" ")));
+    // insertUniqueValue(Status::ParseError, QString("There are unknown
+    // options: %2").arg(unknownOptions.join(" ")));
     setStatus(parseResult.status, Status::ParseError);
     return;
   }
@@ -443,12 +542,12 @@ void Cmd::evalCmd() {
 }
 
 CmdParseResult Cmd::getCmdParseResult() const { return parseResult; }
-inline void setStatus(CmdParseResult::Status &status,
-                      const CmdParseResult::Status statToSet) {
+static inline void setStatus(CmdParseResult::Status &status,
+                             const CmdParseResult::Status statToSet) {
   status = status | statToSet;
 }
-inline bool isStatusSet(CmdParseResult::Status stat,
-                        const CmdParseResult::Status &statToCheck) {
+static inline bool isStatusSet(CmdParseResult::Status stat,
+                               const CmdParseResult::Status &statToCheck) {
   /*
    * 1011 & 0010 == 0010 => True
    * 0000 & 0000 == 0000 => True
@@ -472,11 +571,12 @@ inline bool isStatusEqualAny(const StatMsgType &statMessage,
   }
   return false;
 }
-QString getStatusMessage(const CmdParseResult::Status &statToCheck) {
+static inline QString
+getStatusMessage(const CmdParseResult::Status &statToCheck) {
   const QString &message = __statusToMessage[statToCheck];
   return message.isEmpty() ? QString(__UnkownError) : message;
 }
-inline CmdParseResult::Status getMaximumStatus() {
+static inline CmdParseResult::Status getMaximumStatus() {
   /*
   QMetaEnum statMetaEnum = QMetaEnum::fromType<CmdParseResult::Status>();
   uint64_t statMetaEnumCount = statMetaEnum.keyCount();
@@ -488,7 +588,7 @@ inline CmdParseResult::Status getMaximumStatus() {
           CmdParseResult::Status::MaxValue) -
       1);
 }
-inline bool ipValidate(const QString &ipStr) {
+static inline bool ipValidate(const QString &ipStr) {
   QHostAddress address(ipStr);
   return address.protocol() !=
          QAbstractSocket::NetworkLayerProtocol::UnknownNetworkLayerProtocol;
@@ -511,4 +611,29 @@ CmdParseResult::Status operator^(CmdParseResult::Status &lhs,
                                  CmdParseResult::Status rhs) {
   return static_cast<CmdParseResult::Status>(static_cast<std::uint64_t>(lhs) |
                                              static_cast<std::uint64_t>(rhs));
+}
+
+static inline bool isFramebufferInUse() {
+  const char *framebufferDevices[] = {Fbdev, Fbdev "0", Fbdev "1", Fbdev "2",
+                                      Fbdev "3"};
+  for (const char *device : framebufferDevices) {
+    std::ifstream fb(device);
+    if (fb.good()) {
+      fb.close();
+      return true;
+    }
+  }
+  return false;
+}
+
+static inline bool isFramebufferExists() {
+  const char *framebufferDevices[] = {
+      Fbdev,     Fbdev "0", Fbdev "1", Fbdev "2", Fbdev "3", Fbdev "4",
+      Fbdev "5", Fbdev "6", Fbdev "7", Fbdev "8", Fbdev "9"};
+  for (const char *device : framebufferDevices) {
+    if (QFile::exists(QString(device))) {
+      return true;
+    }
+  }
+  return false;
 }

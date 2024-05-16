@@ -79,7 +79,7 @@
   "\t?port belirtilmişse uyarı verecek? \n"
 
 #define __SECTION_Screen                                                       \
-  "* -s, --screen(number): Ekran indexi\n "                                    \
+  "* -s, --screen(number): Ekran indexi veya framebuffer numarası\n "         \
   "\tDefault: \"" defaultScreen "\"\n"                                         \
   "\tTam yol belirtilmeli, göreli yol ifadesi kabul olmayacak! \n"            \
   "\t?port belirtilmişse uyarı verecek? \n"

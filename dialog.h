@@ -2,6 +2,7 @@
 #define DIALOG_H
 
 #include "cmd.h"
+#include "fbcat.h"
 #include <QDialog>
 #include <QPixmap>
 #include <QScreen>
@@ -12,7 +13,7 @@ class Dialog;
 }
 QT_END_NAMESPACE
 
-QPixmap captureScreen(int screenNumber);
+QPixmap captureScreen(const ScreenInfo &si);
 void save(QString imagename, QPixmap shoot);
 
 class Dialog : public QDialog {
@@ -26,6 +27,7 @@ private:
   Ui::Dialog *ui;
   QPixmap m_image;
   Cmd cmd;
+  FrameBuffer frameBuffer;
   void init();
   void setup();
   void load();

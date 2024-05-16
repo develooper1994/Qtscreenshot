@@ -10,16 +10,18 @@ CONFIG += c++17
 
 SOURCES += \
     cmd.cpp \
+    fbcat.cpp \
     main.cpp \
     dialog.cpp \
     tcpclient.cpp \
     tcpserver.cpp
 
 HEADERS += \
-    ConstMessages.h \
     cmd.h \
+    constmessages.h \
     defines.h \
     dialog.h \
+    fbcat.h \
     help.h \
     tcpclient.h \
     tcpserver.h

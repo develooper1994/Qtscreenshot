@@ -27,12 +27,28 @@ enum class ConnStatus : uint64_t {
   uint16_t OutcomePort = defaultOutcomePort;
 } Conn;
 
+typedef struct TagScreenInfo {
+  enum class ScreenType : uint8_t {
+    ScreenNumber = 0,
+    Framebuffer = 1,
+    ScreenError = 2
+  };
+  QString screen = defaultScreen; // defaultFbdev
+  ScreenType type = ScreenType::ScreenNumber;
+
+  TagScreenInfo();
+  TagScreenInfo(const QString &screen);
+  TagScreenInfo(const QString &screen, ScreenType type);
+
+} ScreenInfo;
+
 // -*-*-*-*-* CmdOptions *-*-*-*-*-
 typedef struct TagCmdOptions {
   bool help, gui, verbose, debug, client, server;
-  int number = 1, screen = 0;
+  int number = 1;
   QString filename = defaultFilename, usage = defaultUsage,
           connectiontype = defaultConnectionType;
+  ScreenInfo screen;
   Conn conn;
 } CmdOptions;
 
@@ -98,19 +114,21 @@ CmdParseResult::Status operator&(CmdParseResult::Status &lhs,
                                  CmdParseResult::Status rhs);
 CmdParseResult::Status operator^(CmdParseResult::Status &lhs,
                                  CmdParseResult::Status rhs);
-void setStatus(
-    CmdParseResult::Status &stat,
-    const CmdParseResult::Status statToSet = CmdParseResult::Status::Ok);
-bool isStatusSet(
+static inline void
+setStatus(CmdParseResult::Status &stat,
+          const CmdParseResult::Status statToSet = CmdParseResult::Status::Ok);
+static inline bool isStatusSet(
     CmdParseResult::Status stat = CmdParseResult::Status::Ok,
     const CmdParseResult::Status &statToCheck = CmdParseResult::Status::Ok);
-bool isStatusEqualAny(
+static inline bool isStatusEqualAny(
     const StatMsgType &statMessage,
     const CmdParseResult::Status &statToCheck = CmdParseResult::Status::Ok);
-QString getStatusMessage(
+static inline QString getStatusMessage(
     const CmdParseResult::Status &statToCheck = CmdParseResult::Status::Ok);
-CmdParseResult::Status getMaximumStatus();
-bool ipValidate(const QString &ipStr);
+static inline CmdParseResult::Status getMaximumStatus();
+static inline bool ipValidate(const QString &ipStr);
+static inline bool isFramebufferInUse();
+static inline bool isFramebufferExists();
 
 // -*-*-*-*-* Cmd *-*-*-*-*-
 class Cmd {

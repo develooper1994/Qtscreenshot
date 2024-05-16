@@ -16,8 +16,11 @@
   "You have entered ip and port in a wrong way. check it out! || <ip:port> "   \
   "|| Default: " defaultBind // qCritical();
 #define __ScreenErrorMessage                                                   \
-  "It is not a number or device doesn't have that screen number. "             \
-  "Default: " defaultScreen
+  "It is not a number or device doesn't have that screen number or there "     \
+  "isn't any device named like that. Please enter screen a number or "         \
+  "framebuffer device"                                                         \
+  "Default(screen number): " defaultScreen                                     \
+  " or Default(framebuffer): " defaultFbdev
 #define __NumberErrorMessage                                                   \
   "number parameter cannot parsed. Default: " defaultNumber
 #define __UsageErrorMessage "Usage Error. Default: " defaultUsage

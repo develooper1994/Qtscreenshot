@@ -23,19 +23,36 @@ Dialog::~Dialog() { delete ui; }
 
 void Dialog::init() { cmd.evalCmd(); }
 void Dialog::setup() { ui->setupUi(this); }
-void Dialog::load() {}
+void Dialog::load() { Q_UNIMPLEMENTED(); }
 
-QPixmap captureScreen(int screenNumber) {
+QPixmap captureScreen(const ScreenInfo &si) {
+  bool ok;
+  int screenNumber = si.screen.toInt(&ok);
+
+  QPixmap image;
   QScreen *screen = QGuiApplication::screens().at(screenNumber);
   if (!screen) {
     qCritical() << "Error: Couldn't get screen";
     return QPixmap();
   }
-  QPixmap image = screen->grabWindow(0); // 0-> entire screen
-  if (image.isNull()) {
-    qCritical() << "Error: Failed to grab screen";
-    return QPixmap();
+
+  switch (si.type) {
+  case ScreenInfo::ScreenType::ScreenNumber:
+    image = screen->grabWindow(0); // 0->entire screen
+    if (image.isNull()) {
+      qCritical() << "Error: Failed to grab screen";
+      return QPixmap();
+    }
+    break;
+  case ScreenInfo::ScreenType::Framebuffer:
+    break;
+  case ScreenInfo::ScreenType::ScreenError:
+    qFatal("There is a Fatal error about Screen capturing!");
+    break;
+  default:
+    break;
   }
+
   return image;
 }
 
