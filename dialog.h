@@ -1,6 +1,7 @@
 #ifndef DIALOG_H
 #define DIALOG_H
 
+#include "cmd.h"
 #include <QDialog>
 #include <QPixmap>
 #include <QScreen>
@@ -24,5 +25,9 @@ public:
 private:
   Ui::Dialog *ui;
   QPixmap m_image;
+  Cmd cmd;
+  void init();
+  void setup();
+  void load();
 };
 #endif // DIALOG_H

@@ -2,12 +2,12 @@
 #define TCPCLIENT_H
 
 #include <QObject>
+#include <QTcpSocket>
 
-class TcpClient : public QObject
-{
-    Q_OBJECT
+class TcpClient : public QObject {
+  Q_OBJECT
 public:
-    explicit TcpClient(QObject *parent = nullptr);
+  explicit TcpClient(QObject *parent = nullptr);
 
 signals:
 };

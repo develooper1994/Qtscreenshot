@@ -1,4 +1,4 @@
-#include "cmd.h"
+#include "dialog.h"
 
 #include <QApplication>
 #include <QCommandLineParser>
@@ -11,8 +11,7 @@ int main(int argc, char *argv[]) {
 
   QApplication app(argc, argv);
 
-  Cmd cmd;
-  cmd.evalCmd();
+  Dialog dialog;
 
   return app.exec();
 }

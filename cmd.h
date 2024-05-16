@@ -2,41 +2,38 @@
 #define CMD_H
 
 #include "defines.h"
-#include "dialog.h"
 #include <QApplication>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
-#include <QObject>
 
 void setApplicationSettings();
 
-// -*-*-*-*-* BindInfo *-*-*-*-*-
-typedef struct TagBindInfo {
+// -*-*-*-*-* Conn *-*-*-*-*-
+typedef struct TagConn {
   /*
-enum class BindInfoStatus : uint64_t {
+enum class ConnStatus : uint64_t {
   Ok = 0,
   Error = 1 << 0,
-  BindError = 1 << 1,
+  ConnError = 1 << 1,
   IpError = 1 << 2,
   IncomePortError = 1 << 3,
   OutcomePortError = 1 << 4,
-  PortError = 1 << 5
+  PortError = 1 << 5,
+  TypeError = 1 << 6
 };
 */
-  QString IpStr = defaultIp, ConnectionType = defaultConnectionType;
+  QString IpStr = defaultIp;
   uint16_t IncomePort = defaultIncomePort;
   uint16_t OutcomePort = defaultOutcomePort;
-} BindInfo;
+} Conn;
 
 // -*-*-*-*-* CmdOptions *-*-*-*-*-
 typedef struct TagCmdOptions {
   bool help, gui, verbose, debug, client, server;
-  int number = 1;
-  QString filename = defaultFilename, usage = defaultUsage;
-  BindInfo bindInfo;
-  // IsSet;
-  bool numberIsSet, filenameIsSet, usageIsSet, bindInfoIsSet,
-      connectiontypeIsSet;
+  int number = 1, screen = 0;
+  QString filename = defaultFilename, usage = defaultUsage,
+          connectiontype = defaultConnectionType;
+  Conn conn;
 } CmdOptions;
 
 // -*-*-*-*-* CmdParseResult *-*-*-*-*-
@@ -47,7 +44,7 @@ typedef struct TagCmdParseResult {
     // 0b0000000000000010 // third way
     Ok = 0,                    // 0000 0000 0000 0000 // MinValue
     VersionRequested = 1 << 0, // 0000 0000 0000 0010
-    HelpRequested = 1 << 1,    // 0000 0000 0000 0001
+    HelpRequested = 1 << 1,    // 0000 0000 0000 0100
     Error = 1 << 2,            // ...
     SubcommandError = 1 << 3,
     PositionalArgumentsError = 1 << 4,
@@ -74,25 +71,18 @@ typedef struct TagCmdParseResult {
     VerboseRequired = 1 << 25,
     DebugRequired = 1 << 26,
     NumberError = 1 << 27,
-    MaxValue = UINT64_MAX
+    ScreenError = 1 << 28,
+    MaxValue
   };
-  typedef QMap<Status, QString> StatMsgType;
-
   // Status statusCode = Status::Ok;
   // my compiler is not that advanced
   // std::optional<QString> status = std::nullopt;
-  StatMsgType statusMessage = StatMsgType();
   CmdOptions options = CmdOptions();
   Status status = Status::Ok;
 
-public:
-  void insertUniqueValue(const Status statToSet = Status::Ok);
-  void insertUniqueValue(Status &key);
-  void insertUniqueValue(Status &key, const Status statToSet = Status::Ok);
-  void insertUniqueValue(const Status &key, const QString &value);
-  void insertUniqueValue(Status &key, const QString &value,
-                             const Status statToSet = Status::Ok);
 } CmdParseResult;
+
+using StatMsgType = QMap<CmdParseResult::Status, QString>;
 
 // use "static_cast" if compiler doesn't support "underlying_type_t"
 // !!!compile error!!!
@@ -102,56 +92,56 @@ template <class T> inline T operator~(T &lhs) {
 }
 */
 
-inline CmdParseResult::Status operator|(CmdParseResult::Status &lhs,
-                                        CmdParseResult::Status rhs) {
-  return static_cast<CmdParseResult::Status>(
-      std::underlying_type_t<CmdParseResult::Status>(lhs) |
-      std::underlying_type_t<CmdParseResult::Status>(rhs));
-}
-inline CmdParseResult::Status operator&(CmdParseResult::Status &lhs,
-                                        CmdParseResult::Status rhs) {
-  return static_cast<CmdParseResult::Status>(
-      std::underlying_type_t<CmdParseResult::Status>(lhs) &
-      std::underlying_type_t<CmdParseResult::Status>(rhs));
-}
-inline CmdParseResult::Status operator^(CmdParseResult::Status &lhs,
-                                        CmdParseResult::Status rhs) {
-  return static_cast<CmdParseResult::Status>(
-      std::underlying_type_t<CmdParseResult::Status>(lhs) |
-      std::underlying_type_t<CmdParseResult::Status>(rhs));
-}
+CmdParseResult::Status operator|(CmdParseResult::Status &lhs,
+                                 CmdParseResult::Status rhs);
+CmdParseResult::Status operator&(CmdParseResult::Status &lhs,
+                                 CmdParseResult::Status rhs);
+CmdParseResult::Status operator^(CmdParseResult::Status &lhs,
+                                 CmdParseResult::Status rhs);
 void setStatus(
     CmdParseResult::Status &stat,
     const CmdParseResult::Status statToSet = CmdParseResult::Status::Ok);
 bool isStatusSet(
     CmdParseResult::Status stat = CmdParseResult::Status::Ok,
     const CmdParseResult::Status &statToCheck = CmdParseResult::Status::Ok);
+bool isStatusEqualAny(
+    const StatMsgType &statMessage,
+    const CmdParseResult::Status &statToCheck = CmdParseResult::Status::Ok);
 QString getStatusMessage(
     const CmdParseResult::Status &statToCheck = CmdParseResult::Status::Ok);
 CmdParseResult::Status getMaximumStatus();
+bool ipValidate(const QString &ipStr);
 
 // -*-*-*-*-* Cmd *-*-*-*-*-
 class Cmd {
 public:
   // constructors
   explicit Cmd();
+  void evalCmd();
+
+  // get-set
+  CmdParseResult getCmdParseResult() const;
+
+private:
   void setup();
   void init();
   void load();
-  void evalCmd();
-
-private:
   // CmdParseResult::Status status = CmdParseResult::Status::Ok;
-  Dialog w;
-  CmdParseResult cmdParseResult;
-  QCommandLineParser parser;
+  StatMsgType statusMessage = StatMsgType();
+  CmdParseResult parseResult;
+  static inline QCommandLineParser parser;
   // Help, Version and other options
-  const QCommandLineOption helpOption = parser.addHelpOption();
-  const QCommandLineOption versionOption = parser.addVersionOption();
-  const QList<QCommandLineOption> optionList = {
+  static inline const QCommandLineOption helpOption = parser.addHelpOption();
+  static inline const QCommandLineOption versionOption =
+      parser.addVersionOption();
+  static inline const QList<QCommandLineOption> optionList = {
       {{"V", "verbose"}, QApplication::translate("main", __SECTION_Verbose)},
       {{"d", "debug"}, QApplication::translate("main", __SECTION_Debug)},
       {{"g", "gui"}, QApplication::translate("main", __SECTION_Gui)},
+      {{"s", "screen"},
+       QApplication::translate("main", __SECTION_Screen),
+       QApplication::translate("main", "screen"),
+       defaultScreen},
       {{"f", "filename"},
        QApplication::translate("main", __SECTION_Filename),
        QApplication::translate("main", "filename"),
@@ -177,22 +167,18 @@ private:
 
   // private methods
   void parseCommandLine();
-  bool ipValidate(const QString &ipStr) const;
 
   void verboseOptionCheck();
   void debugOptionCheck();
   void guiOptionCheck();
   void filenameOptionCheck();
+  void screenOptionCheck();
   void numberOptionCheck();
   void bindOptionCheck();
   void usageOptionCheck();
   void connectiontypeOptionCheck();
   void optionChecks();
-  void subcommandCheck();
-
-  // Eval Client/Server
-  void MainClient();
-  void MainServer();
+  void subcommandChecks();
 };
 
 #endif // CMD_H

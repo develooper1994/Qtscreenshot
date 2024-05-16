@@ -7,11 +7,10 @@
   "another machine if switches activated. \n"                                      \
   "* Komut satırından çalıştığında isteğe bağlı olarak gui açılacak " \
   "veya sadece komut satırından çalıştırılabilir olacak. \n"                \
-  "\n\n"                                                                           \
   "* (bool) = Kullanılmazsa false, kullanılırsa true \n"                        \
-  "* (string) = String olarak ifade edilecek. Kullanılmazsa default olan\n"       \
+  "* (string) = String olarak ifade edilecek. Kullanılmazsa default olan "        \
   "kabul edilecektir. \n"                                                          \
-  "* (number) = Sayı. Kullanılmazsa default olan kabul edilecektir. \n\n"        \
+  "* (number) = Sayı. Kullanılmazsa default olan kabul edilecektir. \n"          \
   "* (positional) = '-' veya '--' şeklinde ifade edilmeyenler. Kullanılmazsa "   \
   "default olan kabul edilecektir. \n"                                             \
   "* (NI) = \"not implemented\". Daha bu özellik programa eklenmedi.\n"           \
@@ -76,6 +75,12 @@
   "* -f, --filename(string): Çekilen ekran görüntüsü nereye "             \
   "kaydedilecek.\n"                                                            \
   "\tDefault: \"" defaultFilename "\"\n"                                       \
+  "\tTam yol belirtilmeli, göreli yol ifadesi kabul olmayacak! \n"            \
+  "\t?port belirtilmişse uyarı verecek? \n"
+
+#define __SECTION_Screen                                                       \
+  "* -s, --screen(number): Ekran indexi\n "                                    \
+  "\tDefault: \"" defaultScreen "\"\n"                                         \
   "\tTam yol belirtilmeli, göreli yol ifadesi kabul olmayacak! \n"            \
   "\t?port belirtilmişse uyarı verecek? \n"
 
