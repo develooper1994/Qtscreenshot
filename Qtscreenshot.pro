@@ -11,6 +11,7 @@ CONFIG += c++17
 SOURCES += \
     cmd.cpp \
     fbcat.cpp \
+    # fbcat_grayscale.cpp \
     main.cpp \
     dialog.cpp \
     tcpclient.cpp \

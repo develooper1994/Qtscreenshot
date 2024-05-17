@@ -33,7 +33,7 @@
 #define defaultFbdev Fbdev defaultScreen
 #define MaxPositionalArgs 0
 #define Author "* Author: Mustafa Selçuk Çağlar\n"
-#define bugTrackerUrl "https://github.com/jwilk/fbcat/issues"
+#define bugTrackerUrl "https://github.com/develooper1994/Qtscreenshot/issues"
 
 #include "constmessages.h"
 #include "help.h"
