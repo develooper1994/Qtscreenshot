@@ -36,7 +36,7 @@ QPixmap captureScreen(const ScreenInfo &si) {
     return QPixmap();
   }
 
-  switch (si.type) {
+  switch (si.screenType) {
   case ScreenInfo::ScreenType::ScreenNumber:
     image = screen->grabWindow(0); // 0->entire screen
     if (image.isNull()) {
@@ -46,7 +46,7 @@ QPixmap captureScreen(const ScreenInfo &si) {
     break;
   case ScreenInfo::ScreenType::Framebuffer:
     break;
-  case ScreenInfo::ScreenType::ScreenError:
+  case ScreenInfo::ScreenType::NotSupported:
     qFatal("There is a Fatal error about Screen capturing!");
     break;
   default:

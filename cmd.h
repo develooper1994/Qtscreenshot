@@ -5,23 +5,24 @@
 #include <QApplication>
 #include <QCommandLineOption>
 #include <QCommandLineParser>
+#include <QPixmap>
 
 void setApplicationSettings();
 
 // -*-*-*-*-* Conn *-*-*-*-*-
 typedef struct TagConn {
   /*
-enum class ConnStatus : uint64_t {
-  Ok = 0,
-  Error = 1 << 0,
-  ConnError = 1 << 1,
-  IpError = 1 << 2,
-  IncomePortError = 1 << 3,
-  OutcomePortError = 1 << 4,
-  PortError = 1 << 5,
-  TypeError = 1 << 6
-};
-*/
+    enum class ConnStatus : uint64_t {
+      Ok = 0,
+      Error = 1 << 0,
+      ConnError = 1 << 1,
+      IpError = 1 << 2,
+      IncomePortError = 1 << 3,
+      OutcomePortError = 1 << 4,
+      PortError = 1 << 5,
+      TypeError = 1 << 6
+    };
+  */
   QString IpStr = defaultIp;
   uint16_t IncomePort = defaultIncomePort;
   uint16_t OutcomePort = defaultOutcomePort;
@@ -29,17 +30,42 @@ enum class ConnStatus : uint64_t {
 
 typedef struct TagScreenInfo {
   enum class ScreenType : uint8_t {
-    ScreenNumber = 0,
-    Framebuffer = 1,
-    ScreenError = 2
+    Ok = 0,
+    ScreenNumber = 1,
+    Framebuffer = 2,
+    X11 = 3,     // !! Not IMplemented Yet !!
+    Wayland = 4, // !! Not IMplemented Yet !!
+    NotSupported = 5,
+    ScreenTypeError = 6,
+    Max
   };
-  QString screen = defaultScreen; // defaultFbdev
-  ScreenType type = ScreenType::ScreenNumber;
 
+  QString screen = defaultScreen; // defaultFbdev
+  ScreenType screenType = defaultScreenType;
+  ImageColor imageColor = defaultImageColor;
+
+  // let the methods guide your way
   TagScreenInfo();
   TagScreenInfo(const QString &screen);
-  TagScreenInfo(const QString &screen, ScreenType type);
+  TagScreenInfo(const QString &screen, ImageColor imageColor);
+  // You are on your own
+  TagScreenInfo(const QString &screen, ScreenType screenType);
+  TagScreenInfo(const QString &screen, ScreenType screenType,
+                ImageColor imageColor);
 
+  inline void printLastScreenTypeMessage();
+  inline void printLastImageColorMessage();
+  inline void printLastMessage();
+
+  QPixmap captureScreen(ScreenType screenType, ImageColor imageColor);
+  void saveImage(QString &imagename, const QPixmap &shoot);
+  QPixmap convertToGrayscale(const QPixmap &pixmap);
+
+private:
+  inline void create();
+  inline void init();
+  inline void extractScreen();
+  inline void extractScreenParameters();
 } ScreenInfo;
 
 // -*-*-*-*-* CmdOptions *-*-*-*-*-
@@ -48,12 +74,13 @@ typedef struct TagCmdOptions {
   int number = 1;
   QString filename = defaultFilename, usage = defaultUsage,
           connectiontype = defaultConnectionType;
-  ScreenInfo screen;
-  Conn conn;
+  static inline ScreenInfo screen;
+  static inline Conn conn;
+
+  inline void printMessages();
 } CmdOptions;
 
 // -*-*-*-*-* CmdParseResult *-*-*-*-*-
-
 typedef struct TagCmdParseResult {
   // Max not combined states : 64 - 1(MaxValue) = 63
   enum class Status : std::uint64_t {
@@ -87,14 +114,15 @@ typedef struct TagCmdParseResult {
     VerboseRequired = 1 << 25,
     DebugRequired = 1 << 26,
     NumberError = 1 << 27,
-    ScreenError = 1 << 28,
-    MaxValue
+    Max
   };
   // Status statusCode = Status::Ok;
   // my compiler is not that advanced
   // std::optional<QString> status = std::nullopt;
-  CmdOptions options = CmdOptions();
-  Status status = Status::Ok;
+  static inline CmdOptions options = CmdOptions();
+  static inline Status status = Status::Ok;
+
+  inline void printMessages();
 
 } CmdParseResult;
 
@@ -108,18 +136,20 @@ template <class T> inline T operator~(T &lhs) {
 }
 */
 
-CmdParseResult::Status operator|(CmdParseResult::Status &lhs,
-                                 CmdParseResult::Status rhs);
-CmdParseResult::Status operator&(CmdParseResult::Status &lhs,
-                                 CmdParseResult::Status rhs);
-CmdParseResult::Status operator^(CmdParseResult::Status &lhs,
-                                 CmdParseResult::Status rhs);
+static inline CmdParseResult::Status operator|(CmdParseResult::Status &lhs,
+                                               CmdParseResult::Status rhs);
+static inline CmdParseResult::Status operator&(CmdParseResult::Status &lhs,
+                                               CmdParseResult::Status rhs);
+static inline CmdParseResult::Status operator^(CmdParseResult::Status &lhs,
+                                               CmdParseResult::Status rhs);
 static inline void
 setStatus(CmdParseResult::Status &stat,
           const CmdParseResult::Status statToSet = CmdParseResult::Status::Ok);
-static inline bool isStatusSet(
+
+static bool isStatusSet(
     CmdParseResult::Status stat = CmdParseResult::Status::Ok,
     const CmdParseResult::Status &statToCheck = CmdParseResult::Status::Ok);
+
 static inline bool isStatusEqualAny(
     const StatMsgType &statMessage,
     const CmdParseResult::Status &statToCheck = CmdParseResult::Status::Ok);
@@ -141,9 +171,10 @@ public:
   CmdParseResult getCmdParseResult() const;
 
 private:
-  void setup();
-  void init();
-  void load();
+  inline void setup();
+  inline void init();
+  inline void load();
+  inline void printMessages();
   // CmdParseResult::Status status = CmdParseResult::Status::Ok;
   StatMsgType statusMessage = StatMsgType();
   CmdParseResult parseResult;

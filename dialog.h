@@ -2,7 +2,6 @@
 #define DIALOG_H
 
 #include "cmd.h"
-#include "fbcat.h"
 #include <QDialog>
 #include <QPixmap>
 #include <QScreen>
@@ -27,7 +26,6 @@ private:
   Ui::Dialog *ui;
   QPixmap m_image;
   Cmd cmd;
-  FrameBuffer frameBuffer;
   void init();
   void setup();
   void load();

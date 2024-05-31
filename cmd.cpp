@@ -1,50 +1,22 @@
 #include "cmd.h"
 #include "defines.h"
 
+#include <QColor>
 #include <QDir>
 #include <QFile>
 #include <QHostAddress>
+#include <QImage>
+#include <QPainter>
 #include <QScreen>
 #include <QSysInfo>
 #include <fstream>
 #include <iostream>
+#if defined(Q_OS_LINUX)
+#include "fbcat.h"
+#endif
 
+using ScreenType = ScreenInfo::ScreenType;
 using Status = CmdParseResult::Status;
-
-static const QStringList usageTypes{"c", "client", "s", "server"};
-static const QStringList connectionTypes{"t", "tcp", "u", "udp"};
-
-// lookup table
-static QMap<Status, QString> __statusToMessage({
-    // runtime
-    // {Status::FileNameRequired, __FilenameMessage(cmdParseResult)},
-    // {Status::BindRequired, __BindRequiredMessage(ipPort)},
-    // {Status::ParserError, __ParserError},
-    // {Status::ParserError, QString("%1 %2").arg("There are unknown options: ",
-    //                       unknownOptions.join(" "))},
-    // compiletime
-    {Status::Ok, __Ok},
-    {Status::HelpRequested, ""},    // HelpMain, HelpClient, HelpServer
-    {Status::VersionRequested, ""}, // VERSION
-    {Status::Error, __UnkownError},
-    {Status::PositionalArgumentsError, __PositionalArgumentsErrorMessage},
-    {Status::VerboseRequired, __VerboseMessage},
-    {Status::DebugRequired, __DebugMessage},
-    {Status::GuiRequired, __GuiMessage},
-    {Status::FileNameError, __FilenameErrorMessage},
-    {Status::BindError, __BindErrorMessage},
-    {Status::ScreenError, __ScreenErrorMessage},
-    {Status::NumberError, __NumberErrorMessage},
-    {Status::UsageError, __UsageErrorMessage},
-    {Status::UsageClient, __ClientMessage},
-    {Status::UsageServer, __ServerMessage},
-    {Status::ConnectionTypeError, __ConnectionTypeErrorMessage},
-    {Status::ConnectionTypeTCP, __TcpMessage},
-    {Status::ConnectionTypeUDP, __UdpMessage},
-    {Status::IpError, __IpErrorMessage},
-    {Status::IncomePortError, __IncomePortErrorMessage},
-    {Status::OutcomePortError, __OutcomePortErrorMessage},
-});
 
 inline void setApplicationSettings() {
   QApplication::setApplicationName(APPLICATIONNAME);
@@ -53,13 +25,75 @@ inline void setApplicationSettings() {
 }
 
 // -*-*-*-*-* ScreenInfo *-*-*-*-*-
+// lookup tables
+// TODO: create enum and generate strings from enum. Use QMetaEnum
+static const QStringList __screenTypes{
+    "n",
+    "sn",
+    "ScreenNumber",
+    "f"
+    "fb",
+    "Framebuffer",
+    "X11",
+    "w",
+    "wl",
+    "Wayland",
+};
+static const QStringList __imageColorTypes{
+    "b",         "bm", "Bitmap",  "g", "gs",
+    "GrayScale", "c",  "Colored", "t", "Transparent"};
+static const QMap<ScreenType, QString> __screenScreenTypeMessage({
+    // compiletime
+    {ScreenType::Ok, __Ok},
+    {ScreenType::ScreenNumber, "ScreenNumber"},
+    {ScreenType::Framebuffer, "Framebuffer"},
+    {ScreenType::X11, "X11"},
+    {ScreenType::Wayland, "Wayland"},
+    {ScreenType::NotSupported, "Not Supported"},
+    {ScreenType::ScreenTypeError, __ScreenErrorMessage},
+    {ScreenType::Max, "Max"},
+});
+static const QMap<ImageColor, QString> __screenImageColorMessage({
+    // compiletime
+    {ImageColor::Ok, __Ok},
+    {ImageColor::Bitmap, "Bitmap Image"},
+    {ImageColor::GrayScale, "GrayScale Image"},
+    {ImageColor::Colored, "Colored Image"},
+    {ImageColor::Transparent, "Transparent Image"},
+    {ImageColor::NotSupported, "Not Supported"},
+    {ImageColor::Max, "Max"},
+});
+
+// let the methods guide your way
 ScreenInfo::TagScreenInfo() : TagScreenInfo(defaultScreen) {}
 
 ScreenInfo::TagScreenInfo(const QString &screen)
-    : TagScreenInfo(screen, ScreenType::ScreenNumber) {}
+    : TagScreenInfo(screen, defaultImageColor) {}
 
-ScreenInfo::TagScreenInfo(const QString &screen, ScreenType type)
-    : screen(screen), type(type) {
+TagScreenInfo::TagScreenInfo(const QString &screen, ImageColor imageColor)
+    : TagScreenInfo(screen, defaultScreenType, imageColor) {
+  create();
+}
+
+// You are on your own
+ScreenInfo::TagScreenInfo(const QString &screen, ScreenType screenType)
+    : TagScreenInfo(screen, screenType, defaultImageColor) {}
+
+ScreenInfo::TagScreenInfo(const QString &screen, ScreenType screenType,
+                          ImageColor imageColor)
+    : screen(screen), screenType(screenType), imageColor(imageColor) {
+  init();
+}
+
+inline void ScreenInfo::create() {
+  extractScreen();
+  extractScreenParameters();
+}
+void ScreenInfo::init() {
+  // init whatever you want!
+}
+
+inline void ScreenInfo::extractScreen() {
   /* Demorgan
    !(P && Q) = (!P) || (!Q)
    !(!P && !Q) = (P) || (Q)
@@ -88,15 +122,17 @@ ScreenInfo::TagScreenInfo(const QString &screen, ScreenType type)
    */
   bool numberOk;
   // screen.toStdString().c_str()
-  int screenNumber = screen.trimmed().toInt(&numberOk); // screen == 0
+  QStringList screenParams = this->screen.split(defaultBindSeperator);
+  int screenNumber =
+      screenParams.at(0).trimmed().toInt(&numberOk); // screen == 0
   // check if numberOk == true otherwise (0 or false)
   const int numberOfScreen = numberOk ? QGuiApplication::screens().count() : 0;
   QScreen *pscreen = QGuiApplication::primaryScreen();
-  int defaultScreenNumber = QGuiApplication::screens().indexOf(pscreen);
+  int pscreenIndex = QGuiApplication::screens().indexOf(pscreen);
   const bool screenNumberAvailable = screenNumber < numberOfScreen;
-  screenNumber = screenNumberAvailable ? screenNumber : defaultScreenNumber;
+  screenNumber = screenNumberAvailable ? screenNumber : pscreenIndex;
   if (!screenNumberAvailable)
-    this->type = ScreenType::ScreenError;
+    this->screenType = ScreenType::NotSupported;
 
 #if defined(Q_OS_LINUX)
 
@@ -104,7 +140,7 @@ ScreenInfo::TagScreenInfo(const QString &screen, ScreenType type)
   const bool fbUsageCheck = isFramebufferExists(),
              fbOk = fbUsageCheck && fbExist;
   if (fbUsageCheck)
-    this->type = ScreenType::Framebuffer;
+    this->screenType = ScreenType::Framebuffer;
 
   if (fbOk) {
     // input == "/dev/fb0"
@@ -118,7 +154,7 @@ ScreenInfo::TagScreenInfo(const QString &screen, ScreenType type)
   } else if (numberOk) {
     // no framebuffer
     this->screen = QString::number(screenNumber);
-    this->type = ScreenType::ScreenNumber;
+    this->screenType = ScreenType::ScreenNumber;
   }
 
 #elif defined(Q_OS_WIN) || defined(Q_OS_MACX)
@@ -133,14 +169,236 @@ ScreenInfo::TagScreenInfo(const QString &screen, ScreenType type)
   qDebug() << "screen: " << this->screen;
 }
 
+inline void ScreenInfo::extractScreenParameters() {
+  // "" -> [""]
+  // ":" -> ["", ""]
+  QString ScreenTypeStr;
+  QStringList screenParams = screen.split(defaultBindSeperator);
+  if (screenParams.count() == 1) {
+    // -s ""
+    screenType = defaultScreenType;
+    return;
+  }
+  // -*-*-* ScreenType *-*-*-
+  if (screenParams.count() > 1) {
+    QString temp1 = screenParams.at(1);
+    bool tempCheck =
+        temp1.isEmpty() &&
+        !__screenTypes.contains(temp1, Qt::CaseSensitivity::CaseInsensitive);
+    QString command = tempCheck ? QString() : temp1;
+
+    if (tempCheck) {
+      // -s "/dev/fd:" // -s ":"
+      screenType = defaultScreenType;
+      return;
+    }
+    // -s ":asd" // -s "asd:asd"
+
+    if (!command.compare(__screenTypes.at(2),
+                         Qt::CaseSensitivity::CaseInsensitive)) {
+      screenType = ScreenType::ScreenNumber;
+    } else if (!command.compare(__screenTypes.at(5),
+                                Qt::CaseSensitivity::CaseInsensitive)) {
+      screenType = ScreenType::Framebuffer;
+    } else if (!command.compare(__screenTypes.at(6),
+                                Qt::CaseSensitivity::CaseInsensitive)) {
+      screenType = ScreenType::X11;
+    } else if (!command.compare(__screenTypes.at(9),
+                                Qt::CaseSensitivity::CaseInsensitive)) {
+      screenType = ScreenType::Wayland;
+    } else {
+      screenType = ScreenType::NotSupported;
+    }
+  }
+
+  // -*-*-* ImageColor *-*-*-
+  if (screenParams.count() > 2) {
+    QString temp1 = screenParams.at(2);
+    bool tempCheck =
+        temp1.isEmpty() && !__imageColorTypes.contains(
+                               temp1, Qt::CaseSensitivity::CaseInsensitive);
+    QString command = tempCheck ? QString() : temp1;
+
+    if (tempCheck) {
+      // -s "/dev/fd:" // -s ":"
+      imageColor = defaultImageColor;
+      return;
+    }
+    // -s ":asd" // -s "asd:asd"
+
+    if (!command.compare(__imageColorTypes.at(2),
+                         Qt::CaseSensitivity::CaseInsensitive)) {
+      imageColor = ImageColor::Bitmap;
+    } else if (!command.compare(__imageColorTypes.at(5),
+                                Qt::CaseSensitivity::CaseInsensitive)) {
+      imageColor = ImageColor::GrayScale;
+    } else if (!command.compare(__imageColorTypes.at(6),
+                                Qt::CaseSensitivity::CaseInsensitive)) {
+      imageColor = ImageColor::Colored;
+    } else if (!command.compare(__imageColorTypes.at(9),
+                                Qt::CaseSensitivity::CaseInsensitive)) {
+      imageColor = ImageColor::Transparent;
+    } else {
+      imageColor = ImageColor::NotSupported;
+    }
+  }
+}
+
+inline void ScreenInfo::printLastScreenTypeMessage() {
+  // one state can be set a time!
+  QMapIterator<ScreenType, QString> it(__screenScreenTypeMessage);
+
+  while (it.hasNext()) {
+    if (this->screenType == it.key()) {
+      qDebug() << it.value();
+      break;
+    }
+    it.next();
+  }
+}
+inline void ScreenInfo::printLastImageColorMessage() {
+  // one state can be set a time!
+  QMapIterator<ImageColor, QString> it(__screenImageColorMessage);
+
+  while (it.hasNext()) {
+    if (this->imageColor == it.key()) {
+      qDebug() << it.value();
+      break;
+    }
+    it.next();
+  }
+}
+inline void ScreenInfo::printLastMessage() {
+  printLastScreenTypeMessage();
+  printLastImageColorMessage();
+}
+
+QPixmap ScreenInfo::captureScreen(ScreenType screenType,
+                                  ImageColor imageColor) {
+  bool ok;
+  int screenNumber = screen.toInt(&ok);
+
+  QPixmap image;
+
+  if (screenType == ScreenType::ScreenNumber) {
+
+    QScreen *screen = QGuiApplication::screens().at(screenNumber);
+    if (!screen) {
+      qCritical() << "Error: Couldn't get screen";
+      return QPixmap();
+    }
+    image = screen->grabWindow(0); // 0->entire screen
+    if (image.isNull()) {
+      qCritical() << "Error: Failed to grab screen";
+      return QPixmap();
+    }
+
+    switch (imageColor) {
+    case ImageColor::GrayScale:
+      break;
+    case ImageColor::Colored:
+      return image;
+      break;
+    case ImageColor::NotSupported:
+    case ImageColor::ImageColorError:
+    default:
+      qFatal("There is a Fatal error about image color capturing!");
+      break;
+    }
+  } else if (screenType == ScreenType::Framebuffer) {
+#if defined(Q_OS_LINUX)
+    FrameBuffer frameBuffer;
+#endif
+    switch (imageColor) {
+    case ImageColor::GrayScale:
+      break;
+    case ImageColor::Colored:
+      break;
+    case ImageColor::NotSupported:
+    case ImageColor::ImageColorError:
+    default:
+      qFatal("There is a Fatal error about image color capturing!");
+      break;
+    }
+  } else {
+    qFatal("There is a Fatal error about screen capturing!");
+  }
+
+  return image;
+}
+
+void ScreenInfo::saveImage(QString &imagename, const QPixmap &shoot) {
+  /*
+    QString initialPath = QStandardPaths::writableLocation(
+        QStandardPaths::StandardLocation::PicturesLocation);
+    if (initialPath.isEmpty()) {
+      initialPath = QDir::currentPath();
+    }
+  */
+  QString initialPath = QDir::currentPath();
+  if (imagename.isEmpty()) {
+    imagename = defaultFilename;
+  }
+  QString fullname =
+      QString("%1%2%3").arg(initialPath).arg(QDir::separator()).arg(imagename);
+  if (!shoot.save(fullname)) {
+    qDebug() << "Save Error: "
+             << QString("Image couldn't save to \"%1\"").arg(imagename);
+  }
+}
+
+QPixmap TagScreenInfo::convertToGrayscale(const QPixmap &pixmap) {
+  QImage image = pixmap.toImage().convertToFormat(QImage::Format_Grayscale8);
+  return QPixmap::fromImage(image);
+}
+
+// -*-*-*-*-* CmdOptions *-*-*-*-*-
+inline void CmdOptions::printMessages() { screen.printLastMessage(); }
+
+// -*-*-*-*-* CmdParseResult *-*-*-*-*-
+inline void CmdParseResult::printMessages() { options.printMessages(); }
+
 // -*-*-*-*-* Cmd *-*-*-*-*-
+// lookup tables
+static const QStringList __usageTypes{"c", "client", "s", "server"};
+static const QStringList __connectionTypes{"t", "tcp", "u", "udp"};
+static QMap<Status, QString> __statusToMessage({
+    // runtime
+    // {Status::FileNameRequired, __FilenameMessage(cmdParseResult)},
+    // {Status::BindRequired, __BindRequiredMessage(ipPort)},
+    // {Status::ParserError, __ParserError},
+    // {Status::ParserError, QString("%1 %2").arg("There are unknown options: ",
+    //                       unknownOptions.join(" "))},
+    // compiletime
+    {Status::Ok, __Ok},
+    {Status::HelpRequested, ""},    // HelpMain, HelpClient, HelpServer
+    {Status::VersionRequested, ""}, // VERSION
+    {Status::Error, __UnkownError},
+    {Status::PositionalArgumentsError, __PositionalArgumentsErrorMessage},
+    {Status::VerboseRequired, __VerboseMessage},
+    {Status::DebugRequired, __DebugMessage},
+    {Status::GuiRequired, __GuiMessage},
+    {Status::FileNameError, __FilenameErrorMessage},
+    {Status::BindError, __BindErrorMessage},
+    {Status::NumberError, __NumberErrorMessage},
+    {Status::UsageError, __UsageErrorMessage},
+    {Status::UsageClient, __ClientMessage},
+    {Status::UsageServer, __ServerMessage},
+    {Status::ConnectionTypeError, __ConnectionTypeErrorMessage},
+    {Status::ConnectionTypeTCP, __TcpMessage},
+    {Status::ConnectionTypeUDP, __UdpMessage},
+    {Status::IpError, __IpErrorMessage},
+    {Status::IncomePortError, __IncomePortErrorMessage},
+    {Status::OutcomePortError, __OutcomePortErrorMessage},
+    {Status::Max, "Max"},
+});
 Cmd::Cmd() {
   init();
   setup();
   load();
 }
 inline void Cmd::init() {
-  parser.addPositionalArgument("subcommand", usageTypes.join('\n'));
+  parser.addPositionalArgument("subcommand", __usageTypes.join('\n'));
   // QStringList cmdOptionNames = parser.optionNames();
   parser.addOptions(optionList);
 }
@@ -150,6 +408,27 @@ inline void Cmd::setup() {
   parser.setApplicationDescription(QString(HelpMain));
 }
 inline void Cmd::load() {}
+inline void Cmd::printMessages() {
+  // multiple state can be set a time!
+  const Status &status = parseResult.status;
+  uint64_t temp = static_cast<uint64_t>(Status::Max) - 1;
+  // ScreenInfo::printMessages();
+  parseResult.printMessages();
+
+  /*
+   * 1) shift_end=(MaxValue-1);  while(shift_end){shift_end=shift_end>> 1}
+   * 2) **bitset class**
+   * 3) *bitfield member*
+   * 11001101
+   * 01000000
+   */
+  while (temp > 0) {
+    Status tempStatus = static_cast<Status>(temp);
+    if (isStatusSet(status, tempStatus))
+      qDebug() << __statusToMessage[tempStatus];
+    temp >>= 1;
+  }
+}
 
 inline void Cmd::verboseOptionCheck() {
   parseResult.options.verbose = parser.isSet("verbose");
@@ -228,16 +507,16 @@ inline void Cmd::usageOptionCheck() {
   QString usage = parser.value("usage").trimmed();
   bool usageOptCheck =
       usage.isEmpty() &&
-      !usageTypes.contains(usage, Qt::CaseSensitivity::CaseInsensitive);
+      !__usageTypes.contains(usage, Qt::CaseSensitivity::CaseInsensitive);
   QString command = usageOptCheck ? QString() : usage;
   Status status;
 
-  if (command.contains(usageTypes.at(1),
+  if (command.contains(__usageTypes.at(1),
                        Qt::CaseSensitivity::CaseInsensitive)) {
     parseResult.options.client = true;
     parseResult.options.server = false;
     status = Status::UsageClient;
-  } else if (command.contains(usageTypes.at(3),
+  } else if (command.contains(__usageTypes.at(3),
                               Qt::CaseSensitivity::CaseInsensitive)) {
     parseResult.options.client = false;
     parseResult.options.server = true;
@@ -257,15 +536,15 @@ inline void Cmd::connectiontypeOptionCheck() {
   QString connectionType = parser.value("connection-type").trimmed();
   bool connectionTypeOptCheck =
       connectionType.isEmpty() &&
-      !connectionTypes.contains(connectionType,
-                                Qt::CaseSensitivity::CaseInsensitive);
+      !__connectionTypes.contains(connectionType,
+                                  Qt::CaseSensitivity::CaseInsensitive);
   QString command = connectionTypeOptCheck ? QString() : connectionType;
   Status status;
 
-  if (!command.compare(connectionTypes.at(1),
+  if (!command.compare(__connectionTypes.at(1),
                        Qt::CaseSensitivity::CaseInsensitive)) {
     status = Status::ConnectionTypeTCP;
-  } else if (!command.compare(connectionTypes.at(3),
+  } else if (!command.compare(__connectionTypes.at(3),
                               Qt::CaseSensitivity::CaseInsensitive)) {
     status = Status::ConnectionTypeUDP;
   } else {
@@ -352,13 +631,13 @@ inline void Cmd::subcommandChecks() {
   // positionalArguments.at(1) : QString();
 
   // usage as subcommand
-  if (!usageSubcommand.compare(usageTypes.at(1),
+  if (!usageSubcommand.compare(__usageTypes.at(1),
                                Qt::CaseSensitivity::CaseInsensitive)) {
     parseResult.options.client = true;
     parseResult.options.server = false;
     // insertUnique(Status::UsageClient);
     setStatus(parseResult.status, Status::UsageClient);
-  } else if (!usageSubcommand.compare(usageTypes.at(3),
+  } else if (!usageSubcommand.compare(__usageTypes.at(3),
                                       Qt::CaseSensitivity::CaseInsensitive)) {
     parseResult.options.client = false;
     parseResult.options.server = true;
@@ -460,6 +739,8 @@ void Cmd::evalCmd() {
 
   const CmdOptions &options = parseResult.options;
   const Status &status = parseResult.status;
+  const ScreenType &screenType = parseResult.options.screen.screenType;
+  const ImageColor &imageColor = parseResult.options.screen.imageColor;
 
   bool connectiontypeIsSet = parser.isSet("connection-type"),
        numberIsSet = parser.isSet("connection-type"),
@@ -497,7 +778,8 @@ void Cmd::evalCmd() {
       isStatusSet(status, Status::OutcomePortError) ||
       isStatusSet(status, Status::ConnectionTypeError) ||
       isStatusSet(status, Status::NumberError) ||
-      isStatusSet(status, Status::ScreenError);
+      (screenType == ScreenType::ScreenTypeError) ||
+      (imageColor == ImageColor::ImageColorError);
 
   // Errors
   if (!notsetPrintsHelp || errorsPrintsHelp) {
@@ -508,21 +790,7 @@ void Cmd::evalCmd() {
   }
 
   if (options.verbose) {
-    uint64_t temp = static_cast<uint64_t>(Status::MaxValue) - 1;
-
-    /*
-     * 1) shift_end=(MaxValue-1);  while(shift_end){shift_end=shift_end>> 1}
-     * 2) **bitset class**
-     * 3) *bitfield member*
-     * 11001101
-     * 01000000
-     */
-    while (temp > 0) {
-      Status tempStatus = static_cast<Status>(temp);
-      if (isStatusSet(status, tempStatus))
-        qDebug() << __statusToMessage[tempStatus];
-      temp >>= 1;
-    }
+    printMessages();
   }
 
   /*
@@ -542,12 +810,14 @@ void Cmd::evalCmd() {
 }
 
 CmdParseResult Cmd::getCmdParseResult() const { return parseResult; }
+
+// -*-*-*-*-* CmdParseResult *-*-*-*-*-
 static inline void setStatus(CmdParseResult::Status &status,
                              const CmdParseResult::Status statToSet) {
   status = status | statToSet;
 }
-static inline bool isStatusSet(CmdParseResult::Status stat,
-                               const CmdParseResult::Status &statToCheck) {
+bool isStatusSet(TagCmdParseResult::Status stat,
+                 const TagCmdParseResult::Status &statToCheck) {
   /*
    * 1011 & 0010 == 0010 => True
    * 0000 & 0000 == 0000 => True
@@ -585,7 +855,7 @@ static inline CmdParseResult::Status getMaximumStatus() {
 
   return static_cast<CmdParseResult::Status>(
       std::underlying_type_t<CmdParseResult::Status>(
-          CmdParseResult::Status::MaxValue) -
+          CmdParseResult::Status::Max) -
       1);
 }
 static inline bool ipValidate(const QString &ipStr) {
@@ -595,20 +865,20 @@ static inline bool ipValidate(const QString &ipStr) {
 }
 
 // std::underlying_type_t<CmdParseResult::Status>
-CmdParseResult::Status operator|(CmdParseResult::Status &lhs,
-                                 CmdParseResult::Status rhs) {
+static inline CmdParseResult::Status operator|(CmdParseResult::Status &lhs,
+                                               CmdParseResult::Status rhs) {
   return static_cast<CmdParseResult::Status>(static_cast<std::uint64_t>(lhs) |
                                              static_cast<std::uint64_t>(rhs));
 }
 
-CmdParseResult::Status operator&(CmdParseResult::Status &lhs,
-                                 CmdParseResult::Status rhs) {
+static inline CmdParseResult::Status operator&(CmdParseResult::Status &lhs,
+                                               CmdParseResult::Status rhs) {
   return static_cast<CmdParseResult::Status>(static_cast<std::uint64_t>(lhs) &
                                              static_cast<std::uint64_t>(rhs));
 }
 
-CmdParseResult::Status operator^(CmdParseResult::Status &lhs,
-                                 CmdParseResult::Status rhs) {
+static inline CmdParseResult::Status operator^(CmdParseResult::Status &lhs,
+                                               CmdParseResult::Status rhs) {
   return static_cast<CmdParseResult::Status>(static_cast<std::uint64_t>(lhs) |
                                              static_cast<std::uint64_t>(rhs));
 }

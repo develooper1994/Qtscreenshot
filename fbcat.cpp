@@ -15,29 +15,40 @@ $ file screenshot.ppm
 \ -mthumb -mfpu=neon -mfloat-abi=hard -mcpu=cortex-a9 -fstack-protector-strong
 -D_FORTIFY_SOURCE=2 -Wformat -Wformat-security -Werror=format-security -pipe
 --sysroot=/opt/poky-dtsis/3.0.4/sysroots/cortexa9t2hf-neon-poky-linux-gnueabi
--Wall -Wextra -fPIC -g -O2 -D_FILE_OFFSET_BITS=64 -c -o fbcat.o fbcat.c
+-Wall -Wextra -fPIC -O2 -D_FILE_OFFSET_BITS=64 -c -o fbcat.o fbcat.c
 
 /opt/poky-dtsis/3.0.4/sysroots/x86_64-pokysdk-linux/usr/bin/arm-poky-linux-gnueabi/arm-poky-linux-gnueabi-gcc
 \ -mthumb -mfpu=neon -mfloat-abi=hard -mcpu=cortex-a9 -fstack-protector-strong
 -D_FORTIFY_SOURCE=2 -Wformat -Wformat-security -Werror=format-security -pipe
 --sysroot=/opt/poky-dtsis/3.0.4/sysroots/cortexa9t2hf-neon-poky-linux-gnueabi
--Wall -Wextra -fPIC -g -O2 -D_FILE_OFFSET_BITS=64 fbcat.o -o fbcat
+-Wall -Wextra -fPIC -O2 -D_FILE_OFFSET_BITS=64 fbcat.o -o fbcat
 
 /opt/poky-dtsis/3.0.4/sysroots/x86_64-pokysdk-linux/usr/bin/arm-poky-linux-gnueabi/arm-poky-linux-gnueabi-strip
 -s fbcat
 */
+
+// https://graphics.stanford.edu/~seander/bithacks.html
 
 #include "fbcat.h"
 #include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 
+#include <inttypes.h>
+#include <linux/fb.h>
 #include <stdarg.h>
+#include <stdbool.h>
+#include <stdio.h>
 #include <stdlib.h>
 #include <sys/ioctl.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
 #include <sys/types.h>
+#include <unistd.h>
+
+typedef struct fb_fix_screeninfo fsi;
+typedef struct fb_var_screeninfo vsi;
+typedef struct fb_cmap cmap;
 
 #if !defined(le32toh) || !defined(le16toh)
 
@@ -113,10 +124,10 @@ static inline uint8_t reverseBits(uint8_t b) {
   return (b * 0x0202020202ULL & 0x010884422010ULL) % 1023;
 }
 
-static inline void dumpVideoMemoryMono(const uint8_t *video_memory,
-                                       const vsi *info, bool black_is_zero,
-                                       uint32_t line_length, FILE *fp) {
-  // pbm(portable bitmap) -> P4
+static inline void dumpVideoMemoryBitmap(const uint8_t *video_memory,
+                                         const vsi *info, bool black_is_zero,
+                                         uint32_t line_length, FILE *fp) {
+  // pbm(portable bitmap) -> P1, P4
   uint32_t x, y;
   const uint32_t bytes_per_row = (info->xres + 7) / 8;
   uint8_t *row = (uint8_t *)malloc(bytes_per_row);
@@ -147,7 +158,7 @@ static void dumpVideoMemoryGrayscale(const uint8_t *video_memory,
                                      const vsi *info,
                                      const struct fb_cmap *colormap,
                                      uint32_t line_length, FILE *fp) {
-  // pgm(portable graymap) -> P5
+  // pgm(portable graymap) -> P2, P5
   uint32_t x, y;
   const uint32_t bytes_per_pixel = (info->bits_per_pixel + 7) / 8;
   uint8_t *row = (uint8_t *)malloc(info->xres);
@@ -191,7 +202,7 @@ static void dumpVideoMemoryGrayscale(const uint8_t *video_memory,
 static inline void dumpVideoMemory(const uint8_t *video_memory, const vsi *info,
                                    const cmap *colormap, uint32_t line_length,
                                    FILE *fp) {
-  // ppm(portable pixelmap) -> P6
+  // ppm(portable pixelmap) -> P3, P6
   uint32_t x, y;
   const uint32_t bytes_per_pixel = (info->bits_per_pixel + 7) / 8;
   uint8_t *row = (uint8_t *)malloc(info->xres * 3);
@@ -351,8 +362,8 @@ static inline int fbcatTest(int argc, const char **argv) {
     }
   }
   if (is_mono)
-    dumpVideoMemoryMono(video_memory, &var_info, black_is_zero,
-                        fix_info.line_length, stdout);
+    dumpVideoMemoryBitmap(video_memory, &var_info, black_is_zero,
+                          fix_info.line_length, stdout);
   else
     dumpVideoMemory(video_memory, &var_info, &colormap, fix_info.line_length,
                     stdout);
@@ -498,10 +509,10 @@ static inline int fbcatGrayScaleTest(int argc, const char **argv) {
 FrameBuffer::FrameBuffer() : FrameBuffer(defaultFbdev) {}
 
 FrameBuffer::FrameBuffer(const char *fbdevName)
-    : FrameBuffer(fbdevName, FrameType::Colored) {}
+    : FrameBuffer(fbdevName, ImageColor::Colored) {}
 
-FrameBuffer::FrameBuffer(const char *fbdevName, FrameType frameType)
-    : fbdevName(fbdevName), frameType(frameType) {}
+FrameBuffer::FrameBuffer(const char *fbdevName, ImageColor imageColor)
+    : fbdevName(fbdevName), frameType(imageColor) {}
 
 void FrameBuffer::check() {
   if (isatty(STDOUT_FILENO))
@@ -545,22 +556,22 @@ void FrameBuffer::initColormap() {
       posixError("FBIOGETCMAP failed");
     break;
   case FB_VISUAL_MONO01:
-    frameType = FrameType::Mono;
+    frameType = ImageColor::Bitmap;
     break;
   case FB_VISUAL_MONO10:
-    frameType = FrameType::Mono;
+    frameType = ImageColor::Bitmap;
     blackIsZero = true;
     break;
   default:
     notSupported("unsupported visual");
   }
-  if (varInfo.bits_per_pixel < 8 && (frameType != FrameType::Mono))
+  if (varInfo.bits_per_pixel < 8 && (frameType != ImageColor::Bitmap))
     notSupported("< 8 bpp");
-  if (varInfo.bits_per_pixel != 1 && (frameType == FrameType::Mono))
+  if (varInfo.bits_per_pixel != 1 && (frameType == ImageColor::Bitmap))
     notSupported("monochrome framebuffer is not 1 bpp");
 }
 
-void FrameBuffer::process(FrameType frameType) {
+void FrameBuffer::process(ImageColor imageColor) {
   const size_t mappedLength =
       fixInfo.line_length * (varInfo.yres + varInfo.yoffset);
   uint8_t *videoMemory =
@@ -585,16 +596,16 @@ void FrameBuffer::process(FrameType frameType) {
       posixError("read failed");
     }
   }
-  switch (frameType) {
-  case FrameType::Mono:
-    dumpVideoMemoryMono(videoMemory, &varInfo, blackIsZero, fixInfo.line_length,
-                        stdout);
+  switch (imageColor) {
+  case ImageColor::Bitmap:
+    dumpVideoMemoryBitmap(videoMemory, &varInfo, blackIsZero,
+                          fixInfo.line_length, stdout);
     break;
-  case FrameType::Grayscale:
+  case ImageColor::GrayScale:
     dumpVideoMemoryGrayscale(videoMemory, &varInfo, &colormap,
                              fixInfo.line_length, stdout);
     break;
-  case FrameType::Colored:
+  case ImageColor::Colored:
   default:
     dumpVideoMemory(videoMemory, &varInfo, &colormap, fixInfo.line_length,
                     stdout);
@@ -613,10 +624,10 @@ void FrameBuffer::process(FrameType frameType) {
   ::close(fd);
 }
 
-void FrameBuffer::processAll(FrameType frameType) {
+void FrameBuffer::processAll(ImageColor imageColor) {
   check();
   initColormap();
-  process(frameType);
+  process(imageColor);
 }
 
 // getter-setter
@@ -631,8 +642,8 @@ void FrameBuffer::setFbdevFromEnv() {
     fbdevName = defaultFbdev;
 }
 
-FrameBuffer::FrameType FrameBuffer::getFrameType() const { return frameType; }
+ImageColor FrameBuffer::getFrameType() const { return frameType; }
 
-void FrameBuffer::setFrameType(FrameType newFrameType) {
+void FrameBuffer::setFrameType(ImageColor newFrameType) {
   frameType = newFrameType;
 }

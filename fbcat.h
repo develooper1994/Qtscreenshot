@@ -20,9 +20,9 @@ static inline uint8_t getColor(uint32_t pixel,
 static inline uint8_t getGrayscale(uint32_t pixel, const vsi *info,
                                    const struct fb_cmap *colormap);
 static inline uint8_t reverseBits(uint8_t b);
-static inline void dumpVideoMemoryMono(const uint8_t *video_memory,
-                                       const vsi *info, bool black_is_zero,
-                                       uint32_t line_length, FILE *fp);
+static inline void dumpVideoMemoryBitmap(const uint8_t *video_memory,
+                                         const vsi *info, bool black_is_zero,
+                                         uint32_t line_length, FILE *fp);
 static void dumpVideoMemoryGrayscale(const uint8_t *video_memory,
                                      const vsi *info,
                                      const struct fb_cmap *colormap,
@@ -34,27 +34,33 @@ static inline void dumpVideoMemory(const uint8_t *video_memory, const vsi *info,
 static inline int fbcatTest(int argc, const char **argv);
 static inline int fbcatGrayScaleTest(int argc, const char **argv);
 
-// c++ interface
+// -*-*-*-*-* FrameBuffer(c++ interface) *-*-*-*-*-
 class FrameBuffer {
-  enum class FrameType : uint8_t { Mono = 0, Grayscale = 1, Colored = 2 };
+  /*
+    enum class FrameType : uint8_t {
+      Bitmap = 0,    // P1, P4
+      GrayScale = 1, // P2, P5
+      Colored = 2,   // P3, P6
+    };
+  */
 
 public:
   FrameBuffer();
   FrameBuffer(const char *fbdevName);
-  FrameBuffer(const char *fbdevName, FrameType frameType);
-  void processAll(FrameType frameType = FrameType::Colored);
+  FrameBuffer(const char *fbdevName, ImageColor imageColor);
+  void processAll(ImageColor imageColor = ImageColor::Colored);
 
   // getter-setter
   const char *getFbdevName() const;
   void setFbdevName(const char *newFbdevName);
   void setFbdevFromEnv();
 
-  FrameType getFrameType() const;
-  void setFrameType(FrameType newFrameType);
+  ImageColor getFrameType() const;
+  void setFrameType(ImageColor newFrameType);
 
 private:
   const char *fbdevName;
-  FrameType frameType = FrameType::Colored;
+  ImageColor frameType = ImageColor::Colored;
   // do not change or modify these variables!
   int fd = STDOUT_FILENO;
   bool blackIsZero = false, mmappedMemory = false;
@@ -72,7 +78,7 @@ private:
 
   void check();
   void initColormap();
-  void process(FrameType frameType = FrameType::Colored);
+  void process(ImageColor imageColor = ImageColor::Colored);
 };
 
 #endif // FBCAT_H
